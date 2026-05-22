@@ -1,0 +1,185 @@
+Transactional Outbox Pattern — Minimal Demo
+=============================================
+
+A minimalist Docker Compose setup demonstrating the transactional outbox pattern.
+Uses PostgreSQL, FastAPI, and a background polling worker. The "queue" is a mock
+function that prints to console and simulates network latency.
+
+1. Architecture
+---------------
+
+Two containers, default Compose network:
+
+- db:  PostgreSQL instance
+- app: FastAPI server + background worker thread
+
+[ Client (cURL) ]
+         │
+         ▼
+ ┌─────────────── app container ────────────────┐
+ │                                              │
+ │  1. FastAPI Service                          │
+ │       │                                      │
+ │       ▼ (ACID Transaction)                   │
+ │  ┌─────────────────┐    2. Worker (Thread)   │
+ │  │ db container    │─────────┐               │
+ │  │                 │         ▼               │
+ │  │ ── orders       │    Reads Outbox         │
+ │  │ ── outbox       │    (FOR UPDATE          │
+ │  │                 │     SKIP LOCKED)        │
+ │  └─────────────────┘         │               │
+ │                              ▼               │
+ │                         3. Mock Queue        │
+ │                            (print + sleep)   │
+ └──────────────────────────────────────────────┘
+
+2. Database Schema
+------------------
+
+orders:
+  id            BIGSERIAL PRIMARY KEY
+  item          TEXT NOT NULL
+  quantity      INT NOT NULL
+  created_at    TIMESTAMPTZ DEFAULT now()
+
+outbox:
+  id            BIGSERIAL PRIMARY KEY
+  aggregate_type TEXT NOT NULL
+  payload       JSONB NOT NULL
+  status        TEXT DEFAULT 'PENDING'   -- PENDING | PROCESSED | FAILED
+  retry_count   INT DEFAULT 0
+  error_message TEXT
+  created_at    TIMESTAMPTZ DEFAULT now()
+  processed_at  TIMESTAMPTZ
+
+3. Service Endpoint
+-------------------
+
+POST /order  — JSON body: {"item": "laptop", "quantity": 1}
+
+Within a single transaction:
+  1. INSERT into orders
+  2. INSERT into outbox (aggregate_type='OrderCreated', payload=order data, status='PENDING')
+  3. COMMIT (atomic — both succeed or both roll back)
+
+4. Background Worker
+--------------------
+
+Continuous polling loop (2s interval):
+
+  1. SELECT ... FROM outbox WHERE status = 'PENDING'
+     ORDER BY created_at FOR UPDATE SKIP LOCKED
+  2. For each row:
+     a. Pass payload to mock queue
+     b. On success: set status='PROCESSED', processed_at=now()
+     c. On failure: increment retry_count, store error_message
+        If retry_count >= 3: set status='FAILED'
+  3. Sleep 2 seconds
+
+5. Mock Queue
+-------------
+
+def send_to_queue(payload):
+    print(f"[QUEUE] Receiving payload: {payload}")
+    time.sleep(0.5)  # Simulate network latency
+    print("[QUEUE] Acknowledged safely")
+    return True
+
+6. File Structure
+-----------------
+
+├── docker-compose.yml
+├── init.sql               # Table creation, runs on DB first start
+└── app/
+    ├── Dockerfile
+    ├── requirements.txt   # fastapi, uvicorn, psycopg2-binary
+    ├── requirements-dev.txt # + pytest, testcontainers[postgres]
+    ├── pytest.ini         # testpaths=tests, pythonpath=.
+    ├── main.py            # FastAPI bootstrap: wires routers + starts worker
+    ├── config.py          # Env vars and tunables (DATABASE_URL, MAX_RETRIES,
+    │                      #   POLL_INTERVAL_SECONDS, QUEUE_LATENCY_SECONDS)
+    ├── db.py              # Connection factory + transaction() context manager
+    │                      #   (commit on success, rollback on error, always close)
+    ├── schemas.py         # Pydantic DTOs: OrderRequest, OrderResponse
+    ├── enums.py           # OutboxStatus (StrEnum: PENDING | PROCESSED | FAILED)
+    ├── publisher.py       # send_to_queue() — mock broker; the swap point for
+    │                      #   a real queue (Kafka, RabbitMQ, ...)
+    ├── worker.py          # OutboxWorker class: poll loop, dispatch, retry policy
+    ├── repositories/      # Data access layer — raw SQL hidden behind functions
+    │   ├── orders.py      #   insert_order()
+    │   └── outbox.py      #   insert_event(), fetch_pending(),
+    │                      #   mark_processed(), mark_failed()
+    ├── services/          # Business logic — transactional use cases
+    │   └── orders.py      #   create_order_with_event() — the heart of the
+    │                      #   outbox pattern: one tx, two inserts (order + event)
+    ├── api/               # FastAPI routers, split per resource
+    │   ├── orders.py      #   POST /order
+    │   └── health.py      #   GET /health
+    └── tests/             # pytest suite — runs against an ephemeral Postgres
+        │                  #   container managed by testcontainers
+        ├── conftest.py    #   Boots container, applies init.sql, truncates per test
+        ├── test_happy_path.py     # Order + outbox inserted, worker → PROCESSED
+        ├── test_atomicity.py      # Forced outbox failure rolls back the order
+        └── test_worker_retry.py   # 3 failures → PENDING, PENDING, FAILED
+
+7. Module Responsibilities
+--------------------------
+
+The split enforces a one-way dependency flow:
+
+    api  ──▶  services  ──▶  repositories  ──▶  db
+              │                                 ▲
+              └──▶ publisher                    │
+    worker  ──▶  repositories + publisher  ─────┘
+
+- api/        : HTTP boundary only. Validates input, calls services, maps
+                exceptions to HTTP responses. No SQL, no business rules.
+- services/   : Owns transactions. Composes repository calls into use cases.
+                The atomicity guarantee of the outbox pattern lives here.
+- repositories/: Pure data access. One module per aggregate. No transactions,
+                no business logic — callers pass in the cursor.
+- publisher   : External broker abstraction. Swap stub for real client without
+                touching worker or services.
+- worker      : Long-running polling loop, isolated in a class so it can be
+                started/stopped and tested independently.
+- db / config : Infrastructure primitives shared by the layers above.
+
+8. Test Suite
+-------------
+
+Three integration tests run against a real PostgreSQL container booted by
+the `testcontainers` library — no manual setup, no mocks for the DB layer
+(the whole point of the pattern is real transactional behavior).
+
+  Test 1 — Happy Path (test_happy_path.py)
+    POST-equivalent: call create_order_with_event("laptop", 1)
+    ASSERT: orders has 1 row, outbox row is PENDING, retry_count=0
+    Run one worker polling cycle (worker._process_batch())
+    ASSERT: outbox row is PROCESSED, processed_at is set
+
+  Test 2 — Transactional Atomicity (test_atomicity.py)
+    Monkeypatch repositories.outbox.insert_event to raise RuntimeError
+    Call create_order_with_event(...) — expect the RuntimeError to propagate
+    ASSERT: orders table is empty AND outbox table is empty
+    (proves the order insert rolled back when the event insert failed)
+
+  Test 3 — Worker Retry / Failure (test_worker_retry.py)
+    Monkeypatch worker.send_to_queue to raise RuntimeError("broker down")
+    Create one order, then run _process_batch() three times in succession
+    ASSERT after iteration 1: status=PENDING, retry_count=1, error stored
+    ASSERT after iteration 2: status=PENDING, retry_count=2
+    ASSERT after iteration 3: status=FAILED,  retry_count=3
+    (proves the retry policy + terminal FAILED transition)
+
+How to run (local dev with uv + venv):
+  cd app
+  uv venv --python 3.11              # one-time: creates .venv/
+  uv pip install -r requirements-dev.txt
+  .venv\Scripts\activate             # Windows  (POSIX: source .venv/bin/activate)
+  pytest
+
+Or without activating, run pytest through the venv interpreter directly:
+  .venv\Scripts\python.exe -m pytest
+
+The first run pulls postgres:15 and is slow; subsequent runs reuse the
+image and complete in a few seconds. Docker must be running locally.
