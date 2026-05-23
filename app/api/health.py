@@ -1,8 +1,10 @@
 from fastapi import APIRouter
+from schemas import HealthResponse
 
-router = APIRouter()
+router = APIRouter(tags=["health"])
 
 
-@router.get("/health")
-def health() -> dict:
-    return {"status": "ok"}
+@router.get("/health", response_model=HealthResponse)
+def health() -> HealthResponse:
+    """Check service health status."""
+    return HealthResponse(status="ok")

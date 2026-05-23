@@ -1,27 +1,38 @@
 from fastapi import APIRouter
+from schemas import AdminResponse, OutboxStats
+from worker import get_worker
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
-@router.post("/process-pending")
-def process_pending() -> dict:
+@router.post(
+    "/process-pending",
+    response_model=AdminResponse,
+    summary="Trigger worker to process pending entries",
+)
+def process_pending() -> AdminResponse:
     """Manually trigger worker to process pending outbox entries.
 
-    Useful when worker was down and needs to catch up.
+    Useful when worker was down and needs to catch up on processing.
     """
-    from worker import get_worker
-
     worker = get_worker()
     if not worker:
-        return {"message": "Worker not initialized", "status": "error"}
+        return AdminResponse(message="Worker not initialized", status="error")
 
     worker._process_batch()
-    return {"message": "Triggered batch processing", "status": "ok"}
+    return AdminResponse(message="Triggered batch processing", status="ok")
 
 
-@router.get("/outbox-stats")
-def outbox_stats() -> dict:
-    """Get outbox statistics by status."""
+@router.get(
+    "/outbox-stats",
+    response_model=OutboxStats,
+    summary="Get outbox event statistics",
+)
+def outbox_stats() -> OutboxStats:
+    """Retrieve current outbox statistics.
+
+    Returns counts of pending, processed, and failed outbox entries.
+    """
     from db import get_connection
 
     conn = get_connection()
@@ -36,11 +47,11 @@ def outbox_stats() -> dict:
                 """
             )
             stats = {row[0]: row[1] for row in cursor.fetchall()}
-        return {
-            "pending": stats.get("PENDING", 0),
-            "processed": stats.get("PROCESSED", 0),
-            "failed": stats.get("FAILED", 0),
-            "total": sum(stats.values()),
-        }
+        return OutboxStats(
+            pending=stats.get("PENDING", 0),
+            processed=stats.get("PROCESSED", 0),
+            failed=stats.get("FAILED", 0),
+            total=sum(stats.values()),
+        )
     finally:
         conn.close()
