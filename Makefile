@@ -7,10 +7,16 @@ help:
 	@echo "  deactivate   Deactivate virtual environment (run: deactivate)"
 	@echo "  dev          Run app in development mode"
 	@echo "  up           Start full environment with Docker Compose"
+	@echo "  up-seed      Start environment and seed with 50 orders"
 	@echo "  down         Stop Docker Compose environment"
-	@echo "  test         Run test suite"
-	@echo "  lint         Run code quality checks (flake8, mypy)"
-	@echo "  format       Auto-format code (black, isort)"
+	@echo "  test         Run test suite (isolated with testcontainers)"
+	@echo "  test-docker  Run test suite against running docker-compose db"
+	@echo "  seed         Create 50 orders via API (populates orders + outbox)"
+	@echo "  kick-worker  Manually trigger worker to process pending outbox entries"
+	@echo "  stats        Show outbox statistics (PENDING, PROCESSED, FAILED counts)"
+	@echo "  pgadmin      Open pgAdmin in browser (shows credentials)"
+	@echo "  lint         Run code quality checks (ruff, mypy)"
+	@echo "  format       Auto-format code (ruff)"
 	@echo "  clean        Remove venv, cache, and build artifacts"
 	@echo "  requirements Freeze current dependencies to requirements.txt"
 
@@ -32,11 +38,17 @@ dev:
 up:
 	docker-compose up
 
+up-seed:
+	SEED_DATA=true SEED_COUNT=50 docker-compose up
+
 down:
 	docker-compose down
 
 test:
 	./venv/bin/python -m pytest app/tests -v
+
+test-docker:
+	DATABASE_URL=postgresql://postgres:postgres@localhost:5432/outbox_demo ./venv/bin/python -m pytest app/tests -v
 
 lint:
 	./venv/bin/ruff check app
@@ -55,3 +67,15 @@ clean:
 
 requirements:
 	./venv/bin/pip freeze > app/requirements.txt
+
+seed:
+	./venv/bin/python scripts/seed_orders.py --count 50 --delay 0.1
+
+kick-worker:
+	./venv/bin/python scripts/outbox_kick.py
+
+stats:
+	./venv/bin/python scripts/outbox_stats.py
+
+pgadmin:
+	./venv/bin/python scripts/open_pgadmin.py
