@@ -19,6 +19,10 @@ help:
 	@echo "  format       Auto-format code (ruff)"
 	@echo "  clean        Remove venv, cache, and build artifacts"
 	@echo "  requirements Freeze current dependencies to requirements.txt"
+	@echo "  docs         Generate OpenAPI docs (JSON, HTML, Markdown)"
+	@echo "  docs-json    Generate OpenAPI JSON schema"
+	@echo "  docs-html    Generate standalone HTML documentation"
+	@echo "  docs-markdown Generate Markdown documentation"
 
 install:
 	python3 -m venv venv
@@ -79,3 +83,15 @@ stats:
 
 pgadmin:
 	./venv/bin/python scripts/open_pgadmin.py
+
+docs:
+	./venv/bin/python scripts/generate_docs.py --all
+
+docs-json:
+	./venv/bin/python scripts/generate_docs.py --json
+
+docs-html:
+	./venv/bin/python scripts/generate_docs.py --html
+
+docs-markdown:
+	./venv/bin/python scripts/generate_docs.py --markdown
