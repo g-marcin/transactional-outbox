@@ -35,6 +35,7 @@ def generate_openapi_yaml(output_path: Path = Path("openapi.yaml")) -> None:
 def generate_html_docs(output_path: Path = Path("api-docs.html")) -> None:
     """Generate standalone Swagger UI HTML file."""
     schema = app.openapi()
+    schema_json = json.dumps(schema).replace("'", "\\'")
 
     html_content = f"""<!DOCTYPE html>
 <html>
@@ -52,7 +53,7 @@ def generate_html_docs(output_path: Path = Path("api-docs.html")) -> None:
     </style>
 </head>
 <body>
-    <redoc spec-url='data:application/json;utf8,{json.dumps(schema).replace("'", "\\'")}'>
+    <redoc spec-url='data:application/json;utf8,{schema_json}'>
     </redoc>
     <script src="https://cdn.jsdelivr.net/npm/redoc@latest/bundles/redoc.standalone.js"></script>
 </body>
