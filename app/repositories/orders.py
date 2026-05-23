@@ -7,4 +7,5 @@ def insert_order(cursor, item: str, quantity: int) -> int:
         """,
         (item, quantity),
     )
-    return cursor.fetchone()[0]
+    row = cursor.fetchone()
+    return int(row[0])

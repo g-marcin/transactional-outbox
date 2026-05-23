@@ -1,6 +1,5 @@
 import threading
 import time
-from typing import Optional
 
 from config import MAX_RETRIES, POLL_INTERVAL_SECONDS
 from db import transaction
@@ -17,7 +16,7 @@ class OutboxWorker:
         self.poll_interval = poll_interval
         self.max_retries = max_retries
         self._stop = threading.Event()
-        self._thread: Optional[threading.Thread] = None
+        self._thread: threading.Thread | None = None
 
     def start(self) -> None:
         self._thread = threading.Thread(target=self._run, daemon=True)

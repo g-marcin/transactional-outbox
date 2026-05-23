@@ -1,5 +1,4 @@
 import pytest
-
 from db import get_connection
 from repositories import outbox as outbox_repo
 from services.orders import create_order_with_event
@@ -10,7 +9,8 @@ def _count(table: str) -> int:
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            return cursor.fetchone()[0]
+            row = cursor.fetchone()
+            return int(row[0])
     finally:
         conn.close()
 

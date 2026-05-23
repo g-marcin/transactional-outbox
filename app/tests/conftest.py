@@ -1,6 +1,5 @@
 import os
 from pathlib import Path
-from typing import Optional
 
 import psycopg2
 import pytest
@@ -8,7 +7,7 @@ from testcontainers.postgres import PostgresContainer
 
 INIT_SQL_PATH = Path(__file__).resolve().parent.parent.parent / "init.sql"
 
-_container: Optional[PostgresContainer] = None
+_container: PostgresContainer | None = None
 
 
 def pytest_sessionstart(session):

@@ -4,7 +4,7 @@ from services.orders import create_order_with_event
 from worker import OutboxWorker
 
 
-def _fetch_outbox(row_id: int):
+def _fetch_outbox(row_id: int) -> tuple[int, int, int | None]:
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -12,7 +12,8 @@ def _fetch_outbox(row_id: int):
                 "SELECT status, retry_count, processed_at FROM outbox WHERE id = %s",
                 (row_id,),
             )
-            return cursor.fetchone()
+            row = cursor.fetchone()
+            return (int(row[0]), int(row[1]), row[2])
     finally:
         conn.close()
 
@@ -22,7 +23,8 @@ def _count(table: str) -> int:
     try:
         with conn.cursor() as cursor:
             cursor.execute(f"SELECT COUNT(*) FROM {table}")
-            return cursor.fetchone()[0]
+            row = cursor.fetchone()
+            return int(row[0])
     finally:
         conn.close()
 

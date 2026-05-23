@@ -1,6 +1,5 @@
 import json
 from datetime import datetime
-from typing import List, Tuple
 
 from enums import OutboxStatus
 
@@ -14,10 +13,11 @@ def insert_event(cursor, aggregate_type: str, payload: dict) -> int:
         """,
         (aggregate_type, json.dumps(payload), OutboxStatus.PENDING),
     )
-    return cursor.fetchone()[0]
+    row = cursor.fetchone()
+    return int(row[0])
 
 
-def fetch_pending(cursor) -> List[Tuple[int, dict]]:
+def fetch_pending(cursor) -> list[tuple[int, dict]]:
     cursor.execute(
         """
         SELECT id, payload FROM outbox
@@ -27,7 +27,8 @@ def fetch_pending(cursor) -> List[Tuple[int, dict]]:
         """,
         (OutboxStatus.PENDING,),
     )
-    return cursor.fetchall()
+    rows = cursor.fetchall()
+    return [(int(row[0]), json.loads(row[1])) for row in rows]
 
 
 def mark_processed(cursor, row_id: int) -> None:
@@ -44,9 +45,7 @@ def mark_processed(cursor, row_id: int) -> None:
 def mark_failed(cursor, row_id: int, error: str, max_retries: int) -> None:
     cursor.execute("SELECT retry_count FROM outbox WHERE id = %s", (row_id,))
     retry_count = cursor.fetchone()[0] + 1
-    new_status = (
-        OutboxStatus.FAILED if retry_count >= max_retries else OutboxStatus.PENDING
-    )
+    new_status = OutboxStatus.FAILED if retry_count >= max_retries else OutboxStatus.PENDING
     cursor.execute(
         """
         UPDATE outbox
