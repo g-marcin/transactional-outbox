@@ -28,7 +28,16 @@ def fetch_pending(cursor) -> list[tuple[int, dict]]:
         (OutboxStatus.PENDING,),
     )
     rows = cursor.fetchall()
-    return [(int(row[0]), json.loads(row[1])) for row in rows]
+    result = []
+    for row in rows:
+        payload = row[1]
+        # Handle both: JSONB auto-parsed to dict vs JSON string
+        if isinstance(payload, dict):
+            parsed_payload = payload
+        else:
+            parsed_payload = json.loads(payload)
+        result.append((int(row[0]), parsed_payload))
+    return result
 
 
 def mark_processed(cursor, row_id: int) -> None:

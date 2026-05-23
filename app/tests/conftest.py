@@ -11,17 +11,23 @@ _container: PostgresContainer | None = None
 
 
 def pytest_sessionstart(session):
-    """Start a Postgres container and apply init.sql before any tests import app modules."""
+    """Start a Postgres container or use existing DATABASE_URL before any tests import app modules."""
     global _container
-    _container = PostgresContainer("postgres:15")
-    _container.start()
 
-    url = (
-        f"postgresql://{_container.username}:{_container.password}"
-        f"@{_container.get_container_host_ip()}:{_container.get_exposed_port(5432)}"
-        f"/{_container.dbname}"
-    )
-    os.environ["DATABASE_URL"] = url
+    # Check if DATABASE_URL is already set (e.g., running against docker-compose)
+    url = os.environ.get("DATABASE_URL")
+
+    if not url:
+        # Start testcontainers for isolated testing
+        _container = PostgresContainer("postgres:18.4")
+        _container.start()
+
+        url = (
+            f"postgresql://{_container.username}:{_container.password}"
+            f"@{_container.get_container_host_ip()}:{_container.get_exposed_port(5432)}"
+            f"/{_container.dbname}"
+        )
+        os.environ["DATABASE_URL"] = url
 
     _apply_init_sql(url)
 

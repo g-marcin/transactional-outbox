@@ -4,7 +4,7 @@ from services.orders import create_order_with_event
 from worker import OutboxWorker
 
 
-def _fetch_outbox(row_id: int) -> tuple[int, int, int | None]:
+def _fetch_outbox(row_id: int) -> tuple[str, int, int | None]:
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
@@ -13,7 +13,7 @@ def _fetch_outbox(row_id: int) -> tuple[int, int, int | None]:
                 (row_id,),
             )
             row = cursor.fetchone()
-            return (int(row[0]), int(row[1]), row[2])
+            return (str(row[0]), int(row[1]), row[2])
     finally:
         conn.close()
 
