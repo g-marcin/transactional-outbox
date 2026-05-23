@@ -37,3 +37,20 @@ class OutboxStats(BaseModel):
     processed: int = Field(..., description="Number of processed outbox entries")
     failed: int = Field(..., description="Number of failed outbox entries")
     total: int = Field(..., description="Total number of outbox entries")
+
+
+class OrderListItem(BaseModel):
+    """Order in list response."""
+
+    order_id: int = Field(..., description="Order ID")
+    item: str = Field(..., description="Product name")
+    quantity: int = Field(..., description="Ordered quantity")
+
+
+class OrderListResponse(BaseModel):
+    """List of orders with pagination."""
+
+    total: int = Field(..., description="Total number of orders")
+    limit: int = Field(..., description="Items per page")
+    offset: int = Field(..., description="Number of items skipped")
+    items: list[OrderListItem] = Field(..., description="Order list")
