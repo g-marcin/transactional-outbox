@@ -38,7 +38,7 @@ deactivate:
 	@echo "Run this command: deactivate"
 
 dev:
-	./venv/bin/python -m uvicorn app.main:app --reload --host 0.0.0.0 --port 8000
+	cd app && ../venv/bin/python -m uvicorn main:app --reload --host 0.0.0.0 --port 8000
 
 up:
 	docker-compose up
@@ -53,7 +53,7 @@ down:
 	docker-compose down
 
 test:
-	./venv/bin/python -m pytest app/tests -v
+	TESTCONTAINERS_RYUK_DISABLED=true ./venv/bin/python -m pytest app/tests -v
 
 test-docker:
 	DATABASE_URL=postgresql://postgres:postgres@localhost:5432/outbox_demo ./venv/bin/python -m pytest app/tests -v
@@ -61,7 +61,7 @@ test-docker:
 lint:
 	./venv/bin/ruff check app
 	./venv/bin/ruff format --check app
-	./venv/bin/mypy app
+	cd app && ../venv/bin/mypy .
 
 format:
 	./venv/bin/ruff check --fix app

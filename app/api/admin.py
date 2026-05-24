@@ -1,5 +1,12 @@
+import sys
+from pathlib import Path
+
 from fastapi import APIRouter
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from schemas import AdminResponse, OutboxStats
+
 from worker import get_worker
 
 router = APIRouter(prefix="/admin", tags=["admin"])

@@ -1,0 +1,37 @@
+{
+  "name": "transactional-outbox",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "lint": "./venv/bin/ruff check app",
+    "format": "./venv/bin/ruff format app",
+    "typecheck": "cd app && ../venv/bin/mypy .",
+    "test": "./venv/bin/python -m pytest app/tests -v --tb=short",
+    "precommit-check": "./venv/bin/ruff check app && ./venv/bin/ruff format --check app",
+    "lint-staged": "lint-staged",
+    "prepare": "husky"
+  },
+  "lint-staged": {
+    "app/**/*.py": [
+      "./venv/bin/ruff check --fix",
+      "./venv/bin/ruff format"
+    ]
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/g-marcin/transactional-outbox.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/g-marcin/transactional-outbox/issues"
+  },
+  "homepage": "https://github.com/g-marcin/transactional-outbox#readme",
+  "devDependencies": {
+    "husky": "^9.1.7",
+    "lint-staged": "^17.0.5"
+  }
+}

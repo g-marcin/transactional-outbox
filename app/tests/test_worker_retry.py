@@ -1,7 +1,13 @@
-import worker as worker_module
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).parent.parent))
+
 from db import get_connection
 from enums import OutboxStatus
 from services.orders import create_order_with_event
+
+import worker as worker_module
 from worker import OutboxWorker
 
 

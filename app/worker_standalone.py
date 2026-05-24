@@ -4,9 +4,8 @@ import signal
 import sys
 import time
 
-from config import MAX_RETRIES, POLL_INTERVAL_SECONDS
-
-from worker import OutboxWorker
+from .config import MAX_RETRIES, POLL_INTERVAL_SECONDS
+from .worker import OutboxWorker
 
 
 def main():
