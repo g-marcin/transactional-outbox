@@ -1,4 +1,4 @@
-.PHONY: help install activate test lint format clean dev up down
+.PHONY: help install activate test lint format clean dev up down restart
 
 help:
 	@echo "Available targets:"
@@ -8,6 +8,7 @@ help:
 	@echo "  dev          Run app in development mode"
 	@echo "  up           Start full environment with Docker Compose"
 	@echo "  up-seed      Start environment and seed with 50 orders"
+	@echo "  restart      Clean restart - remove images, rebuild, and start containers"
 	@echo "  down         Stop Docker Compose environment"
 	@echo "  test         Run test suite (isolated with testcontainers)"
 	@echo "  test-docker  Run test suite against running docker-compose db"
@@ -44,6 +45,9 @@ up:
 
 up-seed:
 	SEED_DATA=true SEED_COUNT=50 docker-compose up
+
+restart:
+	docker-compose down --rmi all && docker-compose up -d && sleep 3 && docker-compose logs worker
 
 down:
 	docker-compose down
