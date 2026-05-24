@@ -45,6 +45,7 @@ class OutboxWorker:
 
     def _process_batch(self) -> None:
         import datetime
+
         now = datetime.datetime.now().isoformat()
         with transaction() as (_, cursor):
             pending = outbox_repo.fetch_pending(cursor)
