@@ -1,12 +1,10 @@
-version: '3.8'
-
 services:
   app:
     image: ${DOCKER_USERNAME}/transactional-outbox-app:latest
     environment:
       DATABASE_URL: ${DATABASE_URL}
     ports:
-      - "8000:8000"
+      - "18750:8000"
     restart: unless-stopped
 
   worker:

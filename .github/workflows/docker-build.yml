@@ -1,4 +1,4 @@
-name: Build and Push Docker Image
+name: CI/CD
 
 on:
   push:
@@ -11,6 +11,9 @@ on:
     branches:
       - main
       - master
+
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
 
 jobs:
   test:
@@ -79,10 +82,7 @@ jobs:
   build:
     runs-on: ubuntu-latest
     needs: test
-
-    permissions:
-      contents: read
-      packages: write
+    if: github.event_name != 'pull_request'
 
     steps:
       - uses: actions/checkout@v4
@@ -91,41 +91,72 @@ jobs:
         uses: docker/setup-buildx-action@v3
 
       - name: Log in to Docker Hub
-        if: github.event_name != 'pull_request'
         uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      - name: Log in to GitHub Container Registry
-        if: github.event_name != 'pull_request'
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Extract metadata
-        id: meta
-        uses: docker/metadata-action@v5
-        with:
-          images: |
-            ${{ secrets.DOCKER_USERNAME }}/transactional-outbox
-            ghcr.io/${{ github.repository }}
-          tags: |
-            type=ref,event=branch
-            type=semver,pattern={{version}}
-            type=semver,pattern={{major}}.{{minor}}
-            type=sha
-            type=raw,value=latest,enable={{is_default_branch}}
-
-      - name: Build and push Docker image
+      - name: Build and push app image
         uses: docker/build-push-action@v6
         with:
           context: .
           file: ./app/Dockerfile
-          push: ${{ github.event_name != 'pull_request' }}
-          tags: ${{ steps.meta.outputs.tags }}
-          labels: ${{ steps.meta.outputs.labels }}
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/transactional-outbox-app:latest
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: ./worker/Dockerfile
+          push: true
+          tags: ${{ secrets.DOCKER_USERNAME }}/transactional-outbox-worker:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: build
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to VPS
+        env:
+          SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
+          VPS_HOST: ${{ secrets.VPS_HOST }}
+          VPS_PORT: ${{ secrets.VPS_PORT }}
+          DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+          DOCKER_USERNAME: ${{ secrets.DOCKER_USERNAME }}
+          DOCKER_PASSWORD: ${{ secrets.DOCKER_PASSWORD }}
+        run: |
+          mkdir -p ~/.ssh
+          echo "$SSH_KEY" > ~/.ssh/id_rsa
+          chmod 600 ~/.ssh/id_rsa
+          ssh-keyscan -H -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
+
+          scp -P "$VPS_PORT" docker-compose.prod.yml root@"$VPS_HOST":~/transactional-outbox-dist/
+
+          # Values are expanded by the runner shell, then the script is piped to the
+          # remote bash via stdin so it does not depend on sshd AcceptEnv.
+          ssh -p "$VPS_PORT" root@"$VPS_HOST" 'bash -s' <<EOF
+          set -euo pipefail
+          cd ~/transactional-outbox-dist
+          export DATABASE_URL='$DATABASE_URL'
+          export DOCKER_USERNAME='$DOCKER_USERNAME'
+          echo '$DOCKER_PASSWORD' | docker login -u '$DOCKER_USERNAME' --password-stdin
+          for attempt in 1 2 3; do
+            docker compose -f docker-compose.prod.yml pull && break
+            if [ "\$attempt" = 3 ]; then echo "Pull failed after 3 attempts" >&2; exit 1; fi
+            echo "Pull attempt \$attempt failed, retrying..." >&2
+            sleep 5
+          done
+          docker compose -f docker-compose.prod.yml up -d
+          EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa

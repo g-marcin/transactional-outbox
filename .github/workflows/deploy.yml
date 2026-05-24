@@ -4,6 +4,9 @@ on:
   push:
     branches: [main, master]
 
+env:
+  FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
@@ -55,9 +58,10 @@ jobs:
           set -euo pipefail
           cd ~/transactional-outbox-dist
           export DATABASE_URL='$DATABASE_URL'
+          export DOCKER_USERNAME='$DOCKER_USERNAME'
           echo '$DOCKER_PASSWORD' | docker login -u '$DOCKER_USERNAME' --password-stdin
-          docker-compose -f docker-compose.prod.yml pull
-          docker-compose -f docker-compose.prod.yml up -d
+          docker compose -f docker-compose.prod.yml pull
+          docker compose -f docker-compose.prod.yml up -d
           EOF
 
       - name: Clean up SSH key
