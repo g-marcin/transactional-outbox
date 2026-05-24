@@ -22,11 +22,21 @@ services:
       dockerfile: ./app/Dockerfile
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/outbox_demo
-      WORKER_CHAOS: ${WORKER_CHAOS:-0}
       SEED_DATA: ${SEED_DATA:-false}
       SEED_COUNT: ${SEED_COUNT:-50}
     ports:
       - "8000:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: .
+      dockerfile: ./worker/Dockerfile
+    environment:
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/outbox_demo
+      WORKER_CHAOS: ${WORKER_CHAOS:-0}
     depends_on:
       db:
         condition: service_healthy

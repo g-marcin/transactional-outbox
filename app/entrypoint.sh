@@ -3,15 +3,10 @@ set -e
 
 cd /app
 
-# Start the app
-uvicorn main:app --host 0.0.0.0 --port 8000 &
-APP_PID=$!
-
-# Wait for app to be ready
-sleep 3
-
 # Seed data if requested
 if [ "$SEED_DATA" = "true" ]; then
+    echo "[ENTRYPOINT] Waiting for API to be ready..."
+    sleep 5
     echo "[ENTRYPOINT] Seeding database with $SEED_COUNT orders..."
     cd /scripts
     python -c "
@@ -22,5 +17,5 @@ seed_orders(count=$SEED_COUNT, delay=0.05, base_url='http://localhost:8000')
     echo "[ENTRYPOINT] Seeding complete"
 fi
 
-# Keep app running
-wait $APP_PID
+# Start the app
+exec uvicorn main:app --host 0.0.0.0 --port 8000

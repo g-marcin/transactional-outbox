@@ -129,3 +129,24 @@ jobs:
             openapi.json
             api-docs.html
             API.md
+
+  deploy:
+    runs-on: ubuntu-latest
+    needs: test
+    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Deploy to Railway
+        uses: railwayapp/railway-action@v1
+        with:
+          service: transactional-outbox
+          environment: production
+        env:
+          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
+
+      - name: Notify deployment
+        run: |
+          echo "✅ App deployed to Railway"
+          echo "URL: ${{ secrets.RAILWAY_URL }}"
