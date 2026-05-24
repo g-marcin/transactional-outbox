@@ -2,36 +2,37 @@ name: Deploy to VPS
 
 on:
   push:
-    branches: [main]
+    branches: [main, master]
 
 jobs:
   build-and-deploy:
     runs-on: ubuntu-latest
 
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
-      # Login to Docker registry
-      - uses: docker/login-action@v2
+      - name: Log in to Docker Hub
+        uses: docker/login-action@v3
         with:
           username: ${{ secrets.DOCKER_USERNAME }}
           password: ${{ secrets.DOCKER_PASSWORD }}
 
-      # Build and push app image
-      - uses: docker/build-push-action@v4
+      - name: Build and push app image
+        uses: docker/build-push-action@v6
         with:
-          context: ./app
+          context: .
+          file: ./app/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/transactional-outbox-app:latest
 
-      # Build and push worker image
-      - uses: docker/build-push-action@v4
+      - name: Build and push worker image
+        uses: docker/build-push-action@v6
         with:
-          context: ./worker
+          context: .
+          file: ./worker/Dockerfile
           push: true
           tags: ${{ secrets.DOCKER_USERNAME }}/transactional-outbox-worker:latest
 
-      # Deploy to VPS
       - name: Deploy to VPS
         env:
           SSH_KEY: ${{ secrets.VPS_SSH_KEY }}
@@ -44,16 +45,21 @@ jobs:
           mkdir -p ~/.ssh
           echo "$SSH_KEY" > ~/.ssh/id_rsa
           chmod 600 ~/.ssh/id_rsa
-          ssh-keyscan -H -p $VPS_PORT $VPS_HOST >> ~/.ssh/known_hosts
+          ssh-keyscan -H -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
-          # Copy docker-compose.prod.yml to VPS
-          scp -P $VPS_PORT docker-compose.prod.yml root@$VPS_HOST:~/transactional-outbox-dist/
+          scp -P "$VPS_PORT" docker-compose.prod.yml root@"$VPS_HOST":~/transactional-outbox-dist/
 
-          # Deploy
-          ssh -p $VPS_PORT root@$VPS_HOST << 'EOF'
-            cd ~/transactional-outbox-dist
-            export DATABASE_URL=$DATABASE_URL
-            docker login -u $DOCKER_USERNAME -p $DOCKER_PASSWORD
-            docker-compose -f docker-compose.prod.yml pull
-            docker-compose -f docker-compose.prod.yml up -d
+          # Values are expanded by the runner shell, then the script is piped to the
+          # remote bash via stdin so it does not depend on sshd AcceptEnv.
+          ssh -p "$VPS_PORT" root@"$VPS_HOST" 'bash -s' <<EOF
+          set -euo pipefail
+          cd ~/transactional-outbox-dist
+          export DATABASE_URL='$DATABASE_URL'
+          echo '$DOCKER_PASSWORD' | docker login -u '$DOCKER_USERNAME' --password-stdin
+          docker-compose -f docker-compose.prod.yml pull
+          docker-compose -f docker-compose.prod.yml up -d
           EOF
+
+      - name: Clean up SSH key
+        if: always()
+        run: rm -f ~/.ssh/id_rsa

@@ -13,8 +13,72 @@ on:
       - master
 
 jobs:
+  test:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:18.4-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: outbox_demo
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.14'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r app/requirements.txt -r app/requirements-dev.txt
+
+      - name: Run linting
+        run: |
+          ruff check app
+          ruff format --check app
+          cd app && mypy .
+
+      - name: Initialize database
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outbox_demo
+        run: |
+          psql $DATABASE_URL < init.sql
+
+      - name: Run tests
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outbox_demo
+        run: |
+          python -m pytest app/tests -v
+
+      - name: Generate OpenAPI docs
+        run: |
+          python scripts/generate_docs.py --all
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: api-docs
+          path: |
+            openapi.json
+            api-docs.html
+            API.md
+
   build:
     runs-on: ubuntu-latest
+    needs: test
 
     permissions:
       contents: read
@@ -56,7 +120,7 @@ jobs:
             type=raw,value=latest,enable={{is_default_branch}}
 
       - name: Build and push Docker image
-        uses: docker/build-push-action@v5
+        uses: docker/build-push-action@v6
         with:
           context: .
           file: ./app/Dockerfile
@@ -65,88 +129,3 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha
           cache-to: type=gha,mode=max
-
-  test:
-    runs-on: ubuntu-latest
-    needs: build
-
-    services:
-      postgres:
-        image: postgres:18.4-alpine
-        env:
-          POSTGRES_USER: postgres
-          POSTGRES_PASSWORD: postgres
-          POSTGRES_DB: outbox_demo
-        options: >-
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: '3.11'
-          cache: 'pip'
-
-      - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          pip install -r app/requirements.txt -r app/requirements-dev.txt
-
-      - name: Initialize database
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outbox_demo
-        run: |
-          psql $DATABASE_URL < init.sql
-
-      - name: Run tests
-        env:
-          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/outbox_demo
-        run: |
-          python -m pytest app/tests -v
-
-      - name: Run linting
-        run: |
-          ruff check app
-          ruff format --check app
-          mypy app
-
-      - name: Generate OpenAPI docs
-        run: |
-          python scripts/generate_docs.py --all
-
-      - name: Upload artifacts
-        uses: actions/upload-artifact@v4
-        with:
-          name: api-docs
-          path: |
-            openapi.json
-            api-docs.html
-            API.md
-
-  deploy:
-    runs-on: ubuntu-latest
-    needs: test
-    if: github.event_name == 'push' && (github.ref == 'refs/heads/main' || github.ref == 'refs/heads/master')
-
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Deploy to Railway
-        uses: railwayapp/railway-action@v1
-        with:
-          service: transactional-outbox
-          environment: production
-        env:
-          RAILWAY_TOKEN: ${{ secrets.RAILWAY_TOKEN }}
-
-      - name: Notify deployment
-        run: |
-          echo "✅ App deployed to Railway"
-          echo "URL: ${{ secrets.RAILWAY_URL }}"
