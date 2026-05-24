@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import os
 import random
+import sys
 import threading
 import time
 
@@ -33,6 +34,8 @@ class OutboxWorker:
         self._stop.set()
 
     def _run(self) -> None:
+        print(f"[WORKER] Polling started (interval: {self.poll_interval}s)", flush=True)
+        sys.stdout.flush()
         while not self._stop.is_set():
             try:
                 self._process_batch()
@@ -41,14 +44,16 @@ class OutboxWorker:
             time.sleep(self.poll_interval)
 
     def _process_batch(self) -> None:
+        import datetime
+        now = datetime.datetime.now().isoformat()
         with transaction() as (_, cursor):
             pending = outbox_repo.fetch_pending(cursor)
             if pending:
-                print(f"[WORKER] Found {len(pending)} pending items")
+                print(f"[WORKER] {now} - Found {len(pending)} pending items", flush=True)
                 for row_id, payload in pending:
                     self._dispatch(cursor, row_id, payload)
             else:
-                print("[WORKER] Poll: No pending items")
+                print(f"[WORKER] {now} - Polling... (no pending items)", flush=True)
 
     def _dispatch(self, cursor, row_id: int, payload: dict) -> None:
         # Chaos injection: simulate processing failures

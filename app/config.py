@@ -5,6 +5,6 @@ DATABASE_URL = os.environ.get(
     "postgresql://postgres:postgres@localhost:5432/outbox_demo",
 )
 
-POLL_INTERVAL_SECONDS = 2
+POLL_INTERVAL_SECONDS = 30
 MAX_RETRIES = 3
 QUEUE_LATENCY_SECONDS = 0.5
