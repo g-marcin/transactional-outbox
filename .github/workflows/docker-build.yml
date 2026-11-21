@@ -138,13 +138,13 @@ jobs:
           chmod 600 ~/.ssh/id_rsa
           ssh-keyscan -H -p "$VPS_PORT" "$VPS_HOST" >> ~/.ssh/known_hosts
 
-          scp -P "$VPS_PORT" docker-compose.prod.yml root@"$VPS_HOST":~/transactional-outbox-dist/
+          scp -P "$VPS_PORT" docker-compose.prod.yml root@"$VPS_HOST":~/Programowanie/transactional-outbox-dist/
 
           # Values are expanded by the runner shell, then the script is piped to the
           # remote bash via stdin so it does not depend on sshd AcceptEnv.
           ssh -p "$VPS_PORT" root@"$VPS_HOST" 'bash -s' <<EOF
           set -euo pipefail
-          cd ~/transactional-outbox-dist
+          cd ~/Programowanie/transactional-outbox-dist
           export DATABASE_URL='$DATABASE_URL'
           export DOCKER_USERNAME='$DOCKER_USERNAME'
           echo '$DOCKER_PASSWORD' | docker login -u '$DOCKER_USERNAME' --password-stdin
